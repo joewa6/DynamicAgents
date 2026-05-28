@@ -1,0 +1,1107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>DynamicAgents V3</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --header-h: 35px;
+    --analysis-h: clamp(145px, 22vh, 190px);
+  }
+  body {
+    background: #08080f; color: #c0c8d8;
+    font-family: 'Consolas','Menlo',monospace; font-size: 12px;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  #header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 8px 14px; border-bottom: 1px solid #181828; flex-shrink: 0;
+  }
+  body.setup-open #header, body.setup-open #body { filter: brightness(0.42); }
+  #header h1 { font-size: 14px; color: #7788bb; }
+  #status { font-size: 11px; color: #334455; }
+  #body {
+    display: flex; flex: 1; overflow: hidden; width: 100%;
+    height: calc(100vh - var(--header-h));
+  }
+  #left {
+    display: flex; flex-direction: column; flex: 0 1 auto;
+    width: min(900px, calc((100vh - var(--header-h) - var(--analysis-h)) * 1.5), calc(100vw - 360px));
+    min-width: min(620px, 64vw);
+  }
+  canvas#sim { display: block; width: 100%; height: auto; aspect-ratio: 3 / 2; }
+  #analysis {
+    display: flex; height: var(--analysis-h); flex-shrink: 0;
+    border-top: 1px solid #181828;
+  }
+  .chart-wrap {
+    flex: 1; padding: 24px 8px 8px; position: relative;
+    border-right: 1px solid #181828;
+  }
+  .chart-wrap:last-child { border-right: none; }
+  .chart-label {
+    position: absolute; top: 7px; left: 10px;
+    font-size: 10px; color: #334455; text-transform: uppercase; letter-spacing: 1px;
+  }
+  #sidebar {
+    flex: 1 1 360px; min-width: 340px; background: #0c0c18;
+    border-left: 1px solid #181828;
+    overflow-y: auto; padding: 7px 10px;
+  }
+  .sec {
+    font-size: 10px; color: #334455; text-transform: uppercase;
+    letter-spacing: 1px; border-bottom: 1px solid #151520;
+    padding-bottom: 2px; margin: 7px 0 5px;
+  }
+  .sec:first-child { margin-top: 0; }
+  .btn-row { display: flex; gap: 6px; margin-bottom: 5px; }
+  button {
+    flex: 1; padding: 4px 0; border: 1px solid #232338;
+    background: #111128; color: #7788aa; border-radius: 3px;
+    cursor: pointer; font: inherit; font-size: 11px;
+    transition: background .1s, border-color .1s;
+  }
+  button:hover { background: #1a1a38; border-color: #383868; }
+  button.active { background: #182818; border-color: #2a4a2a; color: #88cc88; }
+  .slider-row { margin-bottom: 5px; }
+  .slider-row .lbl {
+    display: flex; justify-content: space-between;
+    color: #445566; margin-bottom: 3px;
+  }
+  .slider-row .lbl span { color: #8899bb; }
+  input[type=range] { width: 100%; accent-color: #4455aa; }
+  select {
+    width: 100%; background: #101020; color: #8899bb;
+    border: 1px solid #232338; border-radius: 3px;
+    font: inherit; font-size: 11px; padding: 3px 4px;
+  }
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .stat-box {
+    background: #0f0f1e; border: 1px solid #181828;
+    border-radius: 3px; padding: 4px 6px;
+  }
+  .stat-box .k { font-size: 10px; color: #334455; margin-bottom: 1px; }
+  .stat-box .v { font-size: 14px; font-weight: bold; color: #aabbd0; }
+  .gene-row { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+  .gname { width: 76px; color: #445566; font-size: 11px; flex-shrink: 0; }
+  .gbar-bg { flex: 1; height: 5px; background: #111120; border-radius: 2px; }
+  .gbar { height: 5px; border-radius: 2px; transition: width .4s; }
+  .gval { width: 36px; text-align: right; color: #7788aa; font-size: 11px; }
+  .radar-wrap { height: clamp(210px, 31vh, 285px); min-height: 210px; }
+  #gene-radar { display: block; width: 100%; height: 100%; }
+  .phase-controls {
+    position: absolute; top: 4px; right: 8px;
+    display: flex; gap: 5px; align-items: center;
+  }
+  .phase-controls select { width: 108px; padding: 2px 4px; font-size: 10px; }
+  .phase-heat {
+    display: flex; align-items: center; gap: 3px;
+    color: #667788; font-size: 10px; white-space: nowrap;
+  }
+  .phase-heat input { width: auto; accent-color: #6677cc; }
+  .founder-row {
+    display: grid; grid-template-columns: 86px 112px 1fr 1fr;
+    gap: 5px; align-items: center; margin-bottom: 4px;
+    border-left: 2px solid transparent; padding-left: 4px;
+  }
+  .founder-row.active { border-left-color: #6677cc; }
+  .founder-name { color: #667788; font-size: 11px; cursor: pointer; }
+  .mini-control .mini-lbl {
+    display: flex; justify-content: space-between;
+    color: #445566; font-size: 9px; line-height: 1;
+  }
+  .mini-control input { display: block; }
+  #init-summary { color: #667788; font-size: 10px; margin: 3px 0 4px; }
+  #init-dist {
+    display: block; width: 100%; height: clamp(76px, 11vh, 112px);
+    border: 1px solid #181828; background: #0b0b16;
+  }
+  details.quick-founder { margin-top: 7px; }
+  details.quick-founder summary {
+    cursor: pointer; list-style: none;
+    font-size: 10px; color: #334455; text-transform: uppercase;
+    letter-spacing: 1px; border-bottom: 1px solid #151520;
+    padding-bottom: 2px; margin-bottom: 5px;
+  }
+  details.quick-founder summary::-webkit-details-marker { display: none; }
+  .legend { font-size: 10px; color: #334455; line-height: 1.45; }
+  #setup-screen {
+    position: fixed; inset: 0; z-index: 10;
+    background: #08080f;
+    display: grid; grid-template-rows: auto auto 1fr;
+    padding: 18px 22px; gap: 12px;
+  }
+  #setup-screen.hidden { display: none; }
+  #setup-top {
+    display: flex; align-items: center; justify-content: space-between; gap: 18px;
+    border-bottom: 1px solid #181828; padding-bottom: 12px;
+  }
+  #setup-title h2 { font-size: 18px; color: #aabbd0; margin-bottom: 4px; }
+  #setup-title div { color: #445566; font-size: 11px; }
+  #setup-actions { display: flex; gap: 8px; min-width: 360px; }
+  #setup-tabs {
+    display: flex; gap: 5px; overflow-x: auto;
+    border-bottom: 1px solid #151520; padding-bottom: 8px;
+  }
+  .setup-tab {
+    flex: 0 0 auto; padding: 6px 10px; border: 1px solid #232338;
+    background: #101020; color: #667788; border-radius: 3px;
+    cursor: pointer; font-size: 11px;
+  }
+  .setup-tab.active { background: #182818; border-color: #2a4a2a; color: #99cc99; }
+  #setup-main {
+    min-height: 0; display: grid; grid-template-columns: minmax(460px, 1fr) 420px;
+    gap: 16px;
+  }
+  #setup-chart-wrap {
+    min-height: 0; display: grid; grid-template-rows: 1fr auto;
+    border: 1px solid #181828; background: #0b0b16; padding: 12px;
+  }
+  #setup-dist { width: 100%; height: 100%; min-height: 360px; }
+  #setup-summary { color: #667788; font-size: 11px; padding-top: 8px; }
+  #setup-editor {
+    min-height: 0; overflow-y: auto; border-left: 1px solid #181828;
+    padding-left: 14px;
+  }
+  .setup-grid {
+    display: grid; grid-template-columns: 1fr; gap: 9px;
+  }
+  .setup-card {
+    border: 1px solid #181828; background: #0d0d1a;
+    border-radius: 4px; padding: 9px;
+  }
+  .setup-card.active { border-color: #4455aa; background: #101024; }
+  .setup-card-head {
+    display: flex; align-items: center; justify-content: space-between;
+    color: #8899bb; font-size: 12px; margin-bottom: 7px;
+  }
+  .setup-card-body {
+    display: grid; grid-template-columns: 104px 1fr 1fr; gap: 8px; align-items: end;
+  }
+  .setup-card-body .mini-control .mini-lbl { font-size: 10px; margin-bottom: 3px; }
+  @media (max-width: 980px) {
+    #body { flex-direction: column; }
+    #left {
+      width: min(100vw, calc((60vh - var(--analysis-h)) * 1.5));
+      min-width: 0;
+      align-self: center;
+    }
+    #sidebar {
+      min-width: 0; border-left: none; border-top: 1px solid #181828;
+    }
+    #setup-main { grid-template-columns: 1fr; }
+    #setup-editor { border-left: none; padding-left: 0; }
+    #setup-actions { min-width: 0; }
+  }
+</style>
+</head>
+<body>
+<div id="setup-screen">
+  <div id="setup-top">
+    <div id="setup-title">
+      <h2>Founding Conditions</h2>
+      <div>Choose the initial gene distributions, then start the run.</div>
+    </div>
+    <div id="setup-actions">
+      <button onclick="balancedInitGenes()">balanced</button>
+      <button onclick="randomizeInitGenes()">random</button>
+      <button class="active" onclick="startExperiment()">start run</button>
+    </div>
+  </div>
+  <div id="setup-tabs"></div>
+  <div id="setup-main">
+    <div id="setup-chart-wrap">
+      <canvas id="setup-dist"></canvas>
+      <div id="setup-summary">-</div>
+    </div>
+    <div id="setup-editor"></div>
+  </div>
+</div>
+
+<div id="header">
+  <h1>DynamicAgents V3</h1>
+  <span id="status">connecting...</span>
+</div>
+
+<div id="body">
+  <div id="left">
+    <canvas id="sim"></canvas>
+    <div id="analysis">
+      <div class="chart-wrap">
+        <span class="chart-label">population + gene history</span>
+        <canvas id="ch-hist"></canvas>
+      </div>
+      <div class="chart-wrap">
+        <span class="chart-label">phase plot</span>
+        <div class="phase-controls">
+          <select id="phase-x" onchange="updatePhaseFromLatest()"></select>
+          <select id="phase-y" onchange="updatePhaseFromLatest()"></select>
+          <label class="phase-heat"><input type="checkbox" id="phase-heat" onchange="resetPhaseHeat(); updatePhaseFromLatest()"> heat</label>
+        </div>
+        <canvas id="ch-phase"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <div id="sidebar">
+    <div class="sec">controls</div>
+    <div class="btn-row">
+      <button id="btn-play" onclick="sendCtrl({type:'play'})">play</button>
+      <button onclick="sendCtrl({type:'reset'})">reset</button>
+      <button onclick="sendCtrl({type:'step'})">step</button>
+    </div>
+    <div class="btn-row">
+      <button onclick="openSetup()">founding setup</button>
+    </div>
+    <div class="slider-row">
+      <div class="lbl">speed <span id="lbl-spd">1 tick/frame</span></div>
+      <select id="sl-spd" onchange="setSpeedMode(this.value)">
+        <option value="-1000">1 tick / 1000 frames</option>
+        <option value="-100">1 tick / 100 frames</option>
+        <option value="-10">1 tick / 10 frames</option>
+        <option value="1" selected>1 tick / frame</option>
+        <option value="2">2 ticks / frame</option>
+        <option value="5">5 ticks / frame</option>
+        <option value="10">10 ticks / frame</option>
+        <option value="100">100 ticks / frame</option>
+        <option value="1000">1000 ticks / frame</option>
+        <option value="0">MAX</option>
+      </select>
+    </div>
+    <div class="slider-row">
+      <div class="lbl">food rate <span id="lbl-food">3.0</span></div>
+      <input type="range" min="0" max="20" step="0.1" value="3" id="sl-food"
+        oninput="setLabel('lbl-food', (+this.value).toFixed(1)); sendCtrl({type:'set',food_rate:+this.value})">
+    </div>
+    <div class="slider-row">
+      <div class="lbl">target population <span id="lbl-target-pop">80</span></div>
+      <input type="range" min="20" max="180" step="5" value="80" id="sl-target-pop"
+        oninput="setLabel('lbl-target-pop', this.value); sendCtrl({type:'set',target_pop:+this.value})">
+    </div>
+    <div class="slider-row">
+      <div class="lbl">mutation <span id="lbl-mut">0.15</span></div>
+      <input type="range" min="0" max="1" step="0.01" value="0.15" id="sl-mut"
+        oninput="setLabel('lbl-mut', (+this.value).toFixed(2)); sendCtrl({type:'set',mutation:+this.value})">
+    </div>
+
+    <div class="sec">population</div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="k">agents</div><div class="v" id="s-pop">-</div></div>
+      <div class="stat-box"><div class="k">round</div><div class="v" id="s-round">-</div></div>
+      <div class="stat-box"><div class="k">food</div><div class="v" id="s-food">-</div></div>
+      <div class="stat-box"><div class="k">bonds</div><div class="v" id="s-bonds">-</div></div>
+    </div>
+
+    <div class="sec">gene averages</div>
+    <div class="radar-wrap"><canvas id="gene-radar"></canvas></div>
+
+    <details class="quick-founder">
+      <summary>founding genes</summary>
+      <div id="init-summary">-</div>
+      <canvas id="init-dist"></canvas>
+      <div id="init-gene-controls"></div>
+    </details>
+
+    <div class="sec">legend</div>
+    <div class="legend">
+      color: red = competitive, blue = cooperative<br>
+      size: current energy level<br>
+      green lines: active bonds (opacity = score)<br>
+      rings: birth events<br>
+      <br>
+      space = play/pause | r = reset | . = step
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const SIM_W = 900, SIM_H = 600;
+const simCanvas = document.getElementById('sim');
+const ctx = simCanvas.getContext('2d');
+const DPR = window.devicePixelRatio || 1;
+simCanvas.width = SIM_W * DPR;
+simCanvas.height = SIM_H * DPR;
+ctx.scale(DPR, DPR);
+
+const GENE_NAMES = ['coop','openness','selectivity','forgiveness','kin_bias',
+                    'speed','perception','metabolism','bond_thresh','fertility'];
+const GENE_LO = [0,0,0,0,0, 0.4,15,0.05,0.3,0];
+const GENE_HI = [1,1,1,1,1, 3.5,90,0.30,0.9,1];
+const GENE_COLORS = ['#5577cc','#44aa77','#cc8833','#aa44aa','#cc4455',
+                     '#cc9922','#2299bb','#995522','#668855','#777777'];
+
+function setLabel(id, value) {
+  document.getElementById(id).textContent = value;
+}
+
+function speedLabel(value) {
+  const speed = +value;
+  if (speed === 0) return 'MAX';
+  return speed < 0 ? `1 tick/${Math.abs(speed)} frames` : `${speed} tick${speed === 1 ? '' : 's'}/frame`;
+}
+
+function setSpeedMode(value) {
+  setLabel('lbl-spd', speedLabel(value));
+  sendCtrl({type:'set', speed:+value});
+}
+
+const HIST_LEN = 300;
+Chart.defaults.color = '#445566';
+Chart.defaults.borderColor = '#12121e';
+
+const makeLineChart = (id, datasets, scales) => new Chart(
+  document.getElementById(id).getContext('2d'), {
+    type: 'line',
+    data: { labels: [], datasets },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      scales,
+      plugins: { legend: { display: true, position: 'top',
+        labels: { boxWidth: 10, font: { size: 10 }, padding: 6 } } }
+    }
+  }
+);
+
+const histChart = makeLineChart('ch-hist', [
+  { label:'pop', data:[], borderColor:'#556677', borderWidth:1, pointRadius:0, yAxisID:'pop' },
+  { label:'coop', data:[], borderColor:'#5577cc', borderWidth:1.5, pointRadius:0, yAxisID:'gene' },
+  { label:'openness', data:[], borderColor:'#44aa77', borderWidth:1.5, pointRadius:0, yAxisID:'gene' },
+  { label:'selectivity', data:[], borderColor:'#cc8833', borderWidth:1, pointRadius:0, yAxisID:'gene' },
+  { label:'forgiveness', data:[], borderColor:'#aa44aa', borderWidth:1, pointRadius:0, yAxisID:'gene' },
+  { label:'kin_bias', data:[], borderColor:'#cc4455', borderWidth:1, pointRadius:0, yAxisID:'gene' },
+], {
+  x: { display: false },
+  pop: { type:'linear', position:'left', min:0,
+         grid:{ color:'#10101c' }, ticks:{ maxTicksLimit:4, font:{size:10} } },
+  gene: { type:'linear', position:'right', min:0, max:1,
+          grid:{ display:false }, ticks:{ maxTicksLimit:3, font:{size:10} } },
+});
+
+const geneRadar = new Chart(
+  document.getElementById('gene-radar').getContext('2d'), {
+    type: 'radar',
+    data: {
+      labels: GENE_NAMES,
+      datasets: [{
+        label: 'average',
+        data: Array(GENE_NAMES.length).fill(0),
+        borderColor: '#88a0ee',
+        backgroundColor: 'rgba(136,160,238,0.18)',
+        borderWidth: 1.5,
+        pointRadius: 2,
+        pointBackgroundColor: GENE_COLORS,
+      }]
+    },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      scales: {
+        r: {
+          min: 0, max: 1,
+          angleLines: { color: '#181828' },
+          grid: { color: '#181828' },
+          pointLabels: { color: '#667788', font: { size: 10 } },
+          ticks: { display: false, stepSize: 0.25 }
+        }
+      },
+      plugins: { legend: { display: false } }
+    }
+  }
+);
+
+const PHASE_OPTIONS = [
+  { key:'coop', label:'coop', scope:'agent' },
+  { key:'e', label:'energy', scope:'agent' },
+  { key:'openness', label:'openness', scope:'agent' },
+  { key:'selectivity', label:'selectivity', scope:'agent' },
+  { key:'forgiveness', label:'forgiveness', scope:'agent' },
+  { key:'kin_bias', label:'kin bias', scope:'agent' },
+  { key:'speed', label:'speed', scope:'agent' },
+  { key:'perception', label:'perception', scope:'agent' },
+  { key:'metabolism', label:'metabolism', scope:'agent' },
+  { key:'bond_thresh', label:'bond threshold', scope:'agent' },
+  { key:'fertility', label:'fertility', scope:'agent' },
+  { key:'pop', label:'population', scope:'env' },
+  { key:'food', label:'food', scope:'env' },
+  { key:'n_bonds', label:'bonds', scope:'env' },
+  { key:'avg_energy', label:'avg energy', scope:'env' },
+];
+
+const phaseHistory = [];
+const phaseHeatFrames = [];
+const PHASE_HEAT_LEN = 54;
+let phaseHeatKey = '';
+
+function normalizedEnvStats(s) {
+  return {
+    pop: (s.pop ?? 0) / 200,
+    food: (s.food ?? 0) / 80,
+    n_bonds: Math.min(1, (s.n_bonds ?? 0) / 300),
+    avg_energy: (s.avg_energy ?? 0) / 100,
+  };
+}
+
+function phaseLabel(key) {
+  return PHASE_OPTIONS.find(o => o.key === key)?.label ?? key;
+}
+
+function setupPhaseSelectors() {
+  const options = PHASE_OPTIONS.map(o =>
+    `<option value="${o.key}">${o.label}</option>`
+  ).join('');
+  document.getElementById('phase-x').innerHTML = options;
+  document.getElementById('phase-y').innerHTML = options;
+  document.getElementById('phase-x').value = 'coop';
+  document.getElementById('phase-y').value = 'e';
+}
+
+function phaseHeatEnabled() {
+  return document.getElementById('phase-heat')?.checked ?? false;
+}
+
+function resetPhaseHeat() {
+  phaseHeatFrames.length = 0;
+  phaseHeatKey = '';
+}
+
+const phaseChart = new Chart(
+  document.getElementById('ch-phase').getContext('2d'), {
+    type: 'scatter',
+    data: { datasets: [{ data:[], backgroundColor:[], pointRadius:3 }] },
+    options: {
+      animation: false, responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { min:0, max:1, title:{display:true, text:'cooperation', font:{size:10}},
+             ticks:{font:{size:10}, maxTicksLimit:5}, grid:{color:'#10101c'} },
+        y: { min:0, max:1, title:{display:true, text:'energy', font:{size:10}},
+             ticks:{font:{size:10}, maxTicksLimit:5}, grid:{color:'#10101c'} },
+      },
+      plugins: { legend: { display: false } }
+    }
+  }
+);
+
+const INIT_FORMS = ['uniform', 'normal', 'bimodal', 'low-skew', 'high-skew'];
+const initGenes = GENE_NAMES.map((name, k) => ({
+  name,
+  form: 'uniform',
+  mean: (GENE_LO[k] + GENE_HI[k]) * 0.5,
+  std: (GENE_HI[k] - GENE_LO[k]) * 0.25,
+}));
+let selectedInitGene = 0;
+
+const initDistChart = new Chart(
+  document.getElementById('init-dist').getContext('2d'), {
+    type: 'line',
+    data: {
+      datasets: [
+        { label:'fit', data:[], borderColor:'#7788dd', backgroundColor:'rgba(119,136,221,0.18)',
+          borderWidth:1.5, pointRadius:0, fill:true },
+        { label:'mean', data:[], borderColor:'#e0c15a', borderWidth:1, pointRadius:0 },
+        { label:'std', data:[], borderColor:'#667788', borderWidth:1, pointRadius:0 },
+      ]
+    },
+    options: {
+      animation:false, responsive:true, maintainAspectRatio:false,
+      parsing:false,
+      scales:{
+        x:{ type:'linear', grid:{color:'#10101c'}, ticks:{font:{size:9}, maxTicksLimit:4} },
+        y:{ display:false, min:0 }
+      },
+      plugins:{ legend:{ display:false } }
+    }
+  }
+);
+
+const setupDistChart = new Chart(
+  document.getElementById('setup-dist').getContext('2d'), {
+    type: 'line',
+    data: { datasets: [] },
+    options: {
+      animation:false, responsive:true, maintainAspectRatio:false,
+      parsing:false,
+      scales:{
+        x:{ type:'linear', min:0, max:1, grid:{color:'#10101c'},
+            ticks:{font:{size:10}, maxTicksLimit:6} },
+        y:{ display:false, min:0 }
+      },
+      plugins:{ legend:{ display:true, position:'bottom',
+        labels:{ boxWidth:10, font:{size:10}, padding:8 } } }
+    }
+  }
+);
+
+function stepForGene(k) {
+  return ((GENE_HI[k] - GENE_LO[k]) / 100).toFixed(4);
+}
+
+function fmtGene(k, v) {
+  const span = GENE_HI[k] - GENE_LO[k];
+  return span <= 1 ? (+v).toFixed(2) : (+v).toFixed(1);
+}
+
+function buildInitGeneControls() {
+  const wrap = document.getElementById('init-gene-controls');
+  GENE_NAMES.forEach((name, k) => {
+    const step = stepForGene(k);
+    const formOptions = INIT_FORMS.map(f =>
+      `<option value="${f}" ${f === initGenes[k].form ? 'selected' : ''}>${f}</option>`
+    ).join('');
+    wrap.innerHTML += `
+      <div class="founder-row" id="init-row-${k}">
+        <div class="founder-name" onclick="selectInitGene(${k})">${name}</div>
+        <select id="init-form-${k}" onchange="updateInitGene(${k})">${formOptions}</select>
+        <div class="mini-control">
+          <div class="mini-lbl">mean <span id="init-mean-lbl-${k}">${fmtGene(k, initGenes[k].mean)}</span></div>
+          <input type="range" min="${GENE_LO[k]}" max="${GENE_HI[k]}" step="${step}"
+            value="${initGenes[k].mean}" id="init-mean-${k}" oninput="updateInitGene(${k})">
+        </div>
+        <div class="mini-control">
+          <div class="mini-lbl">std <span id="init-std-lbl-${k}">${fmtGene(k, initGenes[k].std)}</span></div>
+          <input type="range" min="0" max="${(GENE_HI[k] - GENE_LO[k]) * 0.5}" step="${step}"
+            value="${initGenes[k].std}" id="init-std-${k}" oninput="updateInitGene(${k})">
+        </div>
+      </div>`;
+  });
+}
+
+function buildSetupTabs() {
+  const tabs = document.getElementById('setup-tabs');
+  tabs.innerHTML = `<div class="setup-tab active" id="setup-tab-all" onclick="selectSetupTab('all')">All attributes</div>`;
+  GENE_NAMES.forEach((name, k) => {
+    tabs.innerHTML += `<div class="setup-tab" id="setup-tab-${k}" onclick="selectSetupTab(${k})">${name}</div>`;
+  });
+}
+
+function setupCard(k) {
+  const step = stepForGene(k);
+  const formOptions = INIT_FORMS.map(f =>
+    `<option value="${f}" ${f === initGenes[k].form ? 'selected' : ''}>${f}</option>`
+  ).join('');
+  return `
+    <div class="setup-card" id="setup-card-${k}" onclick="selectSetupTab(${k})">
+      <div class="setup-card-head">
+        <span>${initGenes[k].name}</span>
+        <span>${GENE_LO[k]}..${GENE_HI[k]}</span>
+      </div>
+      <div class="setup-card-body">
+        <select id="setup-form-${k}" onclick="event.stopPropagation()" onchange="updateInitGeneFrom('setup', ${k})">
+          ${formOptions}
+        </select>
+        <div class="mini-control">
+          <div class="mini-lbl">mean <span id="setup-mean-lbl-${k}">${fmtGene(k, initGenes[k].mean)}</span></div>
+          <input type="range" min="${GENE_LO[k]}" max="${GENE_HI[k]}" step="${step}"
+            value="${initGenes[k].mean}" id="setup-mean-${k}"
+            oninput="updateInitGeneFrom('setup', ${k})" onclick="event.stopPropagation()">
+        </div>
+        <div class="mini-control">
+          <div class="mini-lbl">std <span id="setup-std-lbl-${k}">${fmtGene(k, initGenes[k].std)}</span></div>
+          <input type="range" min="0" max="${(GENE_HI[k] - GENE_LO[k]) * 0.5}" step="${step}"
+            value="${initGenes[k].std}" id="setup-std-${k}"
+            oninput="updateInitGeneFrom('setup', ${k})" onclick="event.stopPropagation()">
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderSetupEditor() {
+  const editor = document.getElementById('setup-editor');
+  const genes = selectedInitGene === 'all'
+    ? GENE_NAMES.map((_, k) => k)
+    : [selectedInitGene];
+  editor.innerHTML = `<div class="setup-grid">${genes.map(setupCard).join('')}</div>`;
+  syncAllControls();
+}
+
+function seededRand(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (1664525 * s + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+function standardSample(form, rnd) {
+  if (form === 'normal') {
+    const u1 = Math.max(1e-6, rnd()), u2 = rnd();
+    return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+  }
+  if (form === 'bimodal') {
+    return ((rnd() < 0.5 ? -1 : 1) + standardSample('normal', rnd) * 0.30) / 1.044;
+  }
+  if (form === 'low-skew') return (rnd() ** 2 - 1 / 3) / 0.2982;
+  if (form === 'high-skew') return ((1 - rnd() ** 2) - 2 / 3) / 0.2982;
+  return (rnd() - 0.5) * Math.sqrt(12);
+}
+
+function distributionPreview(k) {
+  const g = initGenes[k];
+  const lo = GENE_LO[k], hi = GENE_HI[k], bins = 56;
+  const counts = Array(bins).fill(0);
+  const seed = 1009 + k * 97 + Math.floor(g.mean * 1000) + Math.floor(g.std * 10000);
+  const rnd = seededRand(seed);
+  for (let i = 0; i < 2800; i++) {
+    const v = Math.min(hi, Math.max(lo, g.mean + g.std * standardSample(g.form, rnd)));
+    const b = Math.max(0, Math.min(bins - 1, Math.floor((v - lo) / (hi - lo + 1e-9) * bins)));
+    counts[b]++;
+  }
+  const maxY = Math.max(1, ...counts);
+  const fit = counts.map((c, i) => ({
+    x: lo + (i + 0.5) / bins * (hi - lo),
+    y: c / maxY
+  }));
+  return { fit, maxY: 1 };
+}
+
+function normalizedPreview(k) {
+  const {fit} = distributionPreview(k);
+  return fit.map(p => ({
+    x: (p.x - GENE_LO[k]) / (GENE_HI[k] - GENE_LO[k]),
+    y: p.y
+  }));
+}
+
+function syncGeneControls(k) {
+  const g = initGenes[k];
+  [
+    ['init', 'init'],
+    ['setup', 'setup']
+  ].forEach(([prefix]) => {
+    const form = document.getElementById(`${prefix}-form-${k}`);
+    const mean = document.getElementById(`${prefix}-mean-${k}`);
+    const std = document.getElementById(`${prefix}-std-${k}`);
+    const meanLbl = document.getElementById(`${prefix}-mean-lbl-${k}`);
+    const stdLbl = document.getElementById(`${prefix}-std-lbl-${k}`);
+    if (form) form.value = g.form;
+    if (mean) mean.value = g.mean;
+    if (std) std.value = g.std;
+    if (meanLbl) meanLbl.textContent = fmtGene(k, g.mean);
+    if (stdLbl) stdLbl.textContent = fmtGene(k, g.std);
+  });
+}
+
+function syncAllControls() {
+  GENE_NAMES.forEach((_, k) => syncGeneControls(k));
+}
+
+function refreshInitPreview() {
+  GENE_NAMES.forEach((_, k) => {
+    const row = document.getElementById(`init-row-${k}`);
+    const card = document.getElementById(`setup-card-${k}`);
+    if (row) row.classList.toggle('active', k === selectedInitGene);
+    if (card) card.classList.toggle('active', k === selectedInitGene);
+    const tab = document.getElementById(`setup-tab-${k}`);
+    if (tab) tab.classList.toggle('active', k === selectedInitGene);
+  });
+  const allTab = document.getElementById('setup-tab-all');
+  if (allTab) allTab.classList.toggle('active', selectedInitGene === 'all');
+
+  if (selectedInitGene === 'all') {
+    setupDistChart.data.datasets = GENE_NAMES.map((name, k) => ({
+      label: name,
+      data: normalizedPreview(k),
+      borderColor: GENE_COLORS[k],
+      borderWidth: 1.4,
+      pointRadius: 0,
+      fill: false,
+      tension: 0.15,
+    }));
+    setupDistChart.options.scales.x.min = 0;
+    setupDistChart.options.scales.x.max = 1;
+    setupDistChart.update('none');
+    document.getElementById('setup-summary').textContent =
+      'All attributes shown on normalized 0..1 gene ranges.';
+    return;
+  }
+
+  const k = selectedInitGene;
+  const g = initGenes[k];
+  const {fit} = distributionPreview(k);
+  const lo = GENE_LO[k], hi = GENE_HI[k];
+  const leftStd = Math.max(lo, g.mean - g.std);
+  const rightStd = Math.min(hi, g.mean + g.std);
+  initDistChart.data.datasets[0].data = fit;
+  initDistChart.data.datasets[1].data = [{x:g.mean,y:0}, {x:g.mean,y:1}];
+  initDistChart.data.datasets[2].data = [
+    {x:leftStd,y:0}, {x:leftStd,y:0.75},
+    {x:rightStd,y:0.75}, {x:rightStd,y:0}
+  ];
+  initDistChart.options.scales.x.min = lo;
+  initDistChart.options.scales.x.max = hi;
+  initDistChart.update('none');
+  document.getElementById('init-summary').textContent =
+    `${g.name}: ${g.form}, mean ${fmtGene(k, g.mean)}, std ${fmtGene(k, g.std)}`;
+
+  setupDistChart.data.datasets = [
+    { label:g.name, data:fit, borderColor:GENE_COLORS[k], backgroundColor:'rgba(119,136,221,0.18)',
+      borderWidth:2, pointRadius:0, fill:true, tension:0.15 },
+    { label:'mean', data:[{x:g.mean,y:0}, {x:g.mean,y:1}], borderColor:'#e0c15a',
+      borderWidth:1, pointRadius:0 },
+    { label:'std', data:[{x:leftStd,y:0}, {x:leftStd,y:0.75}, {x:rightStd,y:0.75}, {x:rightStd,y:0}],
+      borderColor:'#667788', borderWidth:1, pointRadius:0 }
+  ];
+  setupDistChart.options.scales.x.min = lo;
+  setupDistChart.options.scales.x.max = hi;
+  setupDistChart.update('none');
+  document.getElementById('setup-summary').textContent =
+    `${g.name}: ${g.form}, mean ${fmtGene(k, g.mean)}, std ${fmtGene(k, g.std)}`;
+}
+
+function selectInitGene(k) {
+  selectedInitGene = k;
+  renderSetupEditor();
+  refreshInitPreview();
+}
+
+function selectSetupTab(k) {
+  selectedInitGene = k;
+  renderSetupEditor();
+  refreshInitPreview();
+}
+
+function updateInitGene(k, send = true) {
+  selectedInitGene = k;
+  initGenes[k].form = document.getElementById(`init-form-${k}`).value;
+  initGenes[k].mean = +document.getElementById(`init-mean-${k}`).value;
+  initGenes[k].std = +document.getElementById(`init-std-${k}`).value;
+  syncGeneControls(k);
+  refreshInitPreview();
+  if (send) {
+    sendCtrl({
+      type:'set_init_gene',
+      gene:k + 1,
+      form:initGenes[k].form,
+      mean:initGenes[k].mean,
+      std:initGenes[k].std
+    });
+  }
+}
+
+function updateInitGeneFrom(prefix, k, send = true) {
+  selectedInitGene = k;
+  initGenes[k].form = document.getElementById(`${prefix}-form-${k}`).value;
+  initGenes[k].mean = +document.getElementById(`${prefix}-mean-${k}`).value;
+  initGenes[k].std = +document.getElementById(`${prefix}-std-${k}`).value;
+  syncGeneControls(k);
+  refreshInitPreview();
+  if (send) sendInitGene(k);
+}
+
+function sendInitGene(k) {
+  sendCtrl({
+    type:'set_init_gene',
+    gene:k + 1,
+    form:initGenes[k].form,
+    mean:initGenes[k].mean,
+    std:initGenes[k].std
+  });
+}
+
+function syncAllInitGenes() {
+  GENE_NAMES.forEach((_, k) => sendInitGene(k));
+}
+
+function balancedInitGenes() {
+  GENE_NAMES.forEach((_, k) => {
+    initGenes[k].form = 'uniform';
+    initGenes[k].mean = (GENE_LO[k] + GENE_HI[k]) * 0.5;
+    initGenes[k].std = (GENE_HI[k] - GENE_LO[k]) * 0.25;
+  });
+  syncAllControls();
+  refreshInitPreview();
+  syncAllInitGenes();
+}
+
+function randomizeInitGenes() {
+  GENE_NAMES.forEach((_, k) => {
+    const span = GENE_HI[k] - GENE_LO[k];
+    initGenes[k].form = INIT_FORMS[Math.floor(Math.random() * INIT_FORMS.length)];
+    initGenes[k].mean = GENE_LO[k] + span * (0.2 + Math.random() * 0.6);
+    initGenes[k].std = span * (0.08 + Math.random() * 0.28);
+  });
+  syncAllControls();
+  refreshInitPreview();
+  syncAllInitGenes();
+}
+
+function openSetup() {
+  document.body.classList.add('setup-open');
+  document.getElementById('setup-screen').classList.remove('hidden');
+  setTimeout(() => {
+    setupDistChart.resize();
+    refreshInitPreview();
+  }, 0);
+}
+
+function startExperiment() {
+  document.body.classList.remove('setup-open');
+  document.getElementById('setup-screen').classList.add('hidden');
+  if (!ws || ws.readyState !== 1) {
+    pendingStart = true;
+    return;
+  }
+  syncAllInitGenes();
+  sendCtrl({type:'reset'});
+  if (!running) sendCtrl({type:'play'});
+}
+
+document.body.classList.add('setup-open');
+selectedInitGene = 'all';
+buildSetupTabs();
+buildInitGeneControls();
+renderSetupEditor();
+refreshInitPreview();
+setupPhaseSelectors();
+
+let ws = null, running = false, latestFrame = null, pendingStart = false;
+
+function connect() {
+  ws = new WebSocket('ws://localhost:8001');
+  ws.onopen = () => {
+    document.getElementById('status').textContent = 'connected';
+    document.getElementById('status').style.color = '#55aa55';
+    syncAllInitGenes();
+    if (pendingStart) {
+      pendingStart = false;
+      sendCtrl({type:'reset'});
+      if (!running) sendCtrl({type:'play'});
+    }
+  };
+  ws.onclose = () => {
+    document.getElementById('status').textContent = 'disconnected - retrying...';
+    document.getElementById('status').style.color = '#aa4444';
+    setTimeout(connect, 2000);
+  };
+  ws.onerror = () => {};
+  ws.onmessage = e => {
+    latestFrame = JSON.parse(e.data);
+    updateUI(latestFrame);
+  };
+}
+
+function sendCtrl(obj) {
+  if (!ws || ws.readyState !== 1) return;
+  if (obj.type === 'play') {
+    running = !running;
+    const btn = document.getElementById('btn-play');
+    btn.textContent = running ? 'pause' : 'play';
+    btn.classList.toggle('active', running);
+  }
+  ws.send(JSON.stringify(obj));
+}
+
+function updateUI(f) {
+  const s = f.stats;
+  document.getElementById('s-pop').textContent = s.pop;
+  document.getElementById('s-round').textContent = s.round.toLocaleString();
+  document.getElementById('s-food').textContent = s.food;
+  document.getElementById('s-bonds').textContent = s.n_bonds;
+
+  geneRadar.data.datasets[0].data = GENE_NAMES.map((name, k) => {
+    const val = s[name] ?? 0;
+    return Math.max(0, Math.min(1, (val - GENE_LO[k]) / (GENE_HI[k] - GENE_LO[k])));
+  });
+  geneRadar.update('none');
+
+  if (s.pop > 0) {
+    histChart.data.labels.push(s.round);
+    if (histChart.data.labels.length > HIST_LEN) histChart.data.labels.shift();
+    const vals = [s.pop, s.coop, s.openness, s.selectivity, s.forgiveness, s.kin_bias];
+    histChart.data.datasets.forEach((ds, i) => {
+      ds.data.push(vals[i]);
+      if (ds.data.length > HIST_LEN) ds.data.shift();
+    });
+    histChart.update('none');
+  }
+
+  phaseHistory.push(normalizedEnvStats(s));
+  if (phaseHistory.length > HIST_LEN) phaseHistory.shift();
+  updatePhaseFromLatest();
+}
+
+function currentPhaseCloud(xKey, yKey) {
+  const xMeta = PHASE_OPTIONS.find(o => o.key === xKey);
+  const yMeta = PHASE_OPTIONS.find(o => o.key === yKey);
+  if (xMeta?.scope === 'agent' && yMeta?.scope === 'agent' && latestFrame.agents?.x) {
+    const a = latestFrame.agents, n = a.x.length;
+    const step = Math.max(1, Math.floor(n / 500));
+    const pts = [], cols = [];
+    for (let i = 0; i < n; i += step) {
+      if (!a[xKey] || !a[yKey]) continue;
+      pts.push({ x: a[xKey][i], y: a[yKey][i] });
+      cols.push((a.coop?.[i] ?? 0.5) * 240);
+    }
+    return { label:'agents', pts, cols };
+  }
+  if (latestFrame.agents?.x && (xMeta?.scope === 'agent' || yMeta?.scope === 'agent')) {
+    const a = latestFrame.agents, n = a.x.length;
+    const env = normalizedEnvStats(latestFrame.stats ?? {});
+    const step = Math.max(1, Math.floor(n / 500));
+    const pts = [], cols = [];
+    for (let i = 0; i < n; i += step) {
+      const xVal = xMeta?.scope === 'agent' ? a[xKey]?.[i] : env[xKey];
+      const yVal = yMeta?.scope === 'agent' ? a[yKey]?.[i] : env[yKey];
+      if (xVal === undefined || yVal === undefined) continue;
+      pts.push({ x: xVal, y: yVal });
+      cols.push((a.coop?.[i] ?? 0.5) * 240);
+    }
+    return { label:'agents + env', pts, cols };
+  }
+  const env = normalizedEnvStats(latestFrame.stats ?? {});
+  if (env[xKey] === undefined || env[yKey] === undefined) return { label:'history', pts:[], cols:[] };
+  return { label:'env', pts:[{ x: env[xKey], y: env[yKey] }], cols:[225] };
+}
+
+function phaseHeatCloud(frames) {
+  const bins = 28;
+  const counts = new Map();
+  frames.forEach(frame => {
+    frame.pts.forEach(p => {
+      if (!Number.isFinite(p.x) || !Number.isFinite(p.y)) return;
+      const bx = Math.max(0, Math.min(bins - 1, Math.floor(p.x * bins)));
+      const by = Math.max(0, Math.min(bins - 1, Math.floor(p.y * bins)));
+      const key = `${bx},${by}`;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+  });
+  const maxCount = Math.max(1, ...counts.values());
+  const pts = [], colors = [], sizes = [];
+  counts.forEach((count, key) => {
+    const [bx, by] = key.split(',').map(Number);
+    const t = count / maxCount;
+    pts.push({ x:(bx + 0.5) / bins, y:(by + 0.5) / bins });
+    colors.push(`rgba(255,${Math.round(220 - 110 * t)},${Math.round(80 - 50 * t)},${0.18 + 0.72 * t})`);
+    sizes.push(3 + 9 * Math.sqrt(t));
+  });
+  return { pts, colors, sizes };
+}
+
+function updatePhaseFromLatest() {
+  if (!latestFrame) return;
+  const xKey = document.getElementById('phase-x').value;
+  const yKey = document.getElementById('phase-y').value;
+  const xMeta = PHASE_OPTIONS.find(o => o.key === xKey);
+  const yMeta = PHASE_OPTIONS.find(o => o.key === yKey);
+  const key = `${xKey}|${yKey}`;
+  const heat = phaseHeatEnabled();
+
+  phaseChart.options.scales.x.title.text = phaseLabel(xKey);
+  phaseChart.options.scales.y.title.text = phaseLabel(yKey);
+
+  if (phaseHeatKey !== key) {
+    resetPhaseHeat();
+    phaseHeatKey = key;
+  }
+
+  if (xMeta?.scope === 'env' && yMeta?.scope === 'env') {
+    const pts = heat
+      ? phaseHistory.filter(p => p[xKey] !== undefined && p[yKey] !== undefined).map(p => ({ x:p[xKey], y:p[yKey] }))
+      : phaseHistory.slice(-1).filter(p => p[xKey] !== undefined && p[yKey] !== undefined).map(p => ({ x:p[xKey], y:p[yKey] }));
+    phaseChart.data.datasets[0].label = heat ? 'history heat' : 'current';
+    phaseChart.data.datasets[0].data = pts;
+    phaseChart.data.datasets[0].backgroundColor = heat ? 'rgba(255,184,70,0.55)' : 'rgba(136,160,238,0.8)';
+    phaseChart.data.datasets[0].pointRadius = heat ? 3 : 4;
+    phaseChart.update('none');
+    return;
+  }
+
+  const cloud = currentPhaseCloud(xKey, yKey, xMeta, yMeta);
+  if (heat) {
+    phaseHeatFrames.push(cloud);
+    if (phaseHeatFrames.length > PHASE_HEAT_LEN) phaseHeatFrames.shift();
+    const heatCloud = phaseHeatCloud(phaseHeatFrames);
+    phaseChart.data.datasets[0].label = `${cloud.label} heat`;
+    phaseChart.data.datasets[0].data = heatCloud.pts;
+    phaseChart.data.datasets[0].backgroundColor = heatCloud.colors;
+    phaseChart.data.datasets[0].pointRadius = heatCloud.sizes;
+  } else {
+    phaseHeatFrames.length = 0;
+    phaseChart.data.datasets[0].label = cloud.label;
+    phaseChart.data.datasets[0].data = cloud.pts;
+    phaseChart.data.datasets[0].backgroundColor =
+      cloud.cols.map(h => `hsla(${h ?? 225},65%,55%,0.65)`);
+    phaseChart.data.datasets[0].pointRadius = 3;
+  }
+  phaseChart.update('none');
+}
+
+function render() {
+  requestAnimationFrame(render);
+  ctx.fillStyle = '#08080f';
+  ctx.fillRect(0, 0, SIM_W, SIM_H);
+
+  ctx.strokeStyle = 'rgba(255,255,255,0.022)';
+  ctx.lineWidth = 0.5;
+  for (let x = 0; x <= SIM_W; x += 80) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, SIM_H); ctx.stroke();
+  }
+  for (let y = 0; y <= SIM_H; y += 80) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(SIM_W, y); ctx.stroke();
+  }
+
+  if (!latestFrame) return;
+  const f = latestFrame;
+
+  ctx.fillStyle = 'rgba(220,226,232,0.22)';
+  if (f.food?.x) for (let i = 0; i < f.food.x.length; i++) {
+    ctx.beginPath();
+    ctx.arc(f.food.x[i], f.food.y[i], 1.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  if (f.bonds?.i && f.agents) {
+    const {x, y} = f.agents;
+    for (let b = 0; b < f.bonds.i.length; b++) {
+      const ai = f.bonds.i[b], aj = f.bonds.j[b], sc = f.bonds.score[b];
+      ctx.strokeStyle = `rgba(28,210,85,${sc * 0.45})`;
+      ctx.lineWidth = sc * 1.8;
+      ctx.beginPath();
+      ctx.moveTo(x[ai], y[ai]);
+      ctx.lineTo(x[aj], y[aj]);
+      ctx.stroke();
+    }
+  }
+
+  if (f.rings) for (const r of f.rings) {
+    const radius = r.age * 0.7 + 3;
+    const alpha = Math.max(0, 1 - r.age / 50);
+    ctx.strokeStyle = `rgba(255,210,40,${alpha})`;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(r.x, r.y, radius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  if (f.agents?.x) {
+    const {x, y, e, coop} = f.agents;
+    for (let i = 0; i < x.length; i++) {
+      const r = 2.5 + e[i] * 3;
+      const hue = coop[i] * 240;
+      const lum = 38 + e[i] * 42;
+      ctx.beginPath();
+      ctx.arc(x[i], y[i], r, 0, Math.PI * 2);
+      ctx.fillStyle = `hsl(${hue},82%,${lum}%)`;
+      ctx.fill();
+      ctx.lineWidth = 1.1;
+      ctx.strokeStyle = 'rgba(245,248,255,0.45)';
+      ctx.stroke();
+    }
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('setup-screen').classList.contains('hidden')) {
+    if (e.key === 'Enter') startExperiment();
+    return;
+  }
+  if (e.key === ' ') { e.preventDefault(); sendCtrl({type:'play'}); }
+  if (e.key === 'r') sendCtrl({type:'reset'});
+  if (e.key === '.') sendCtrl({type:'step'});
+});
+
+connect();
+render();
+</script>
+</body>
+</html>
