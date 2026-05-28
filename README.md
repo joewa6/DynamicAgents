@@ -1,216 +1,241 @@
 # DynamicAgents
 
-A real-time spatial evolutionary simulation — a **spatial prisoner's dilemma** rendered with live glow effects and an interactive control panel. Watch cooperation and defection compete, cluster, and co-evolve as emergent patterns arise from simple local rules.
+Two real-time spatial evolutionary simulations built in Python (pygame + NumPy + SciPy).
+Both demonstrate emergent collective behaviour arising from simple local rules — the difference
+is the social complexity of the agents.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
-![Pygame](https://img.shields.io/badge/Pygame-2.x-green)
-![NumPy](https://img.shields.io/badge/NumPy-vectorised-orange)
-![SciPy](https://img.shields.io/badge/SciPy-cKDTree-lightblue)
-
----
-
-## Quick start
-
-```bash
-pip install pygame numpy scipy matplotlib
-python main.py
+```
+python v1/main.py   ← spatial prisoner's dilemma (fast, clean)
+python v2/main.py   ← social trust, kin recognition, sexual reproduction
 ```
 
-Press **PLAY** in the panel (or `Space`) to start.
-
 ---
 
-## What the simulation is
+## v1 — Spatial Prisoner's Dilemma
 
-Each agent is a dot with three genes and an energy level. Energy is the single currency of survival: gain enough to reproduce, lose it all and die. Agents move around a bounded 900×500 world, eat food pellets for energy, and interact with neighbours. The interactions are the core of the simulation — they implement a one-shot game whose outcome is determined entirely by the cooperativeness scores of both agents.
+The classic setup. Agents move, eat, and play a one-shot game with every neighbour.
+Three genes evolve under selection pressure: cooperativeness, speed, and perception.
+No memory. No consent. Cooperation persists only through spatial clustering.
 
-The result is a **spatial prisoner's dilemma**: classical game theory predicts cooperation collapses in well-mixed populations, but spatial structure lets cooperator clusters persist, creating a rich mixed equilibrium rather than total defection.
+### Genes
 
----
+| Gene | Range | Effect | Cost |
+|---|---|---|---|
+| `cooperativeness` | 0–1 | Determines interaction outcome | High coop exploited by defectors |
+| `speed` | 0.4–3.5 | Max movement per tick | Burns extra energy each round |
+| `perception` | 12–90 px | Vision range for food and neighbours | Also burns extra energy |
 
-## Agent properties
+### Tick sequence
 
-### State (changes every tick)
+1. **Move** — steer toward nearest visible food (within 3× perception); wander if none visible
+2. **Eat** — absorb food pellet within 10 px (+22 energy)
+3. **Interact** — play one-shot game with every neighbour inside perception radius
 
-| Property | Description |
+| Combined coop | Outcome |
 |---|---|
-| `position` | (x, y) in the world |
-| `velocity` | (vx, vy), capped by the `speed` gene |
-| `energy` | 0 – 100. The agent dies when this hits 0; it reproduces when it exceeds 80 |
+| `sum > 1.3` | Mutualism — both +2.5 energy |
+| `sum < 0.7` | Fighting — both −3.5 energy |
+| Mixed | Exploitation — selfish agent +3.0, cooperative agent −4.5 |
 
-### Genes (inherited, mutate slowly)
+4. **Decay** — lose `0.13 + speed × 0.025 + perception × 0.001` energy each tick
 
-| Gene | Range | Effect |
+### Reproduction
+
+- Asexual. Trigger: energy ≥ 80. Cost: 33 energy from parent.
+- Child spawns within 12 px with parent's genes ± mutation noise.
+- Population cap: 1400.
+
+### What to watch
+
+The openness of the population is entirely determined by spatial clustering.
+A patch of blue agents (high coop) thrives through mutualism. A red defector
+entering the patch profits initially, but depletes the cluster and then fights
+other defectors. This is why a mixed equilibrium stabilises rather than total defection.
+
+---
+
+## v2 — Social Trust, Kin Recognition, Sexual Reproduction
+
+A significantly more complex model. Agents now maintain **relationship memory**,
+require **consent** before any interaction, reproduce **sexually** only with
+sufficiently trusted partners, and can use experience with known agents to infer
+attitudes toward their **genetic relatives**.
+
+### Genes (8 total)
+
+| Gene | Range | What it does | Trade-off |
+|---|---|---|---|
+| `cooperativeness` | 0–1 | Interaction game payoff | High coop exploited by defectors |
+| `openness` | 0–1 | Default attitude toward strangers | High openness → more interactions, more exposure |
+| `selectivity` | 0–1 | Minimum attitude needed to consent to interact | High selectivity → safe but misses opportunities |
+| `trustRate` | 0–1 | How fast positive experiences build memory score | High → bonds form quickly; betrayals also sting more |
+| `forgiveness` | 0–1 | How much a bad interaction damages memory | Low → long grudges, slow to re-engage |
+| `kinBias` | 0–1 | Weight of genetic similarity in attitude toward strangers | High → strong in-group preference |
+| `speed` | 0.4–3.5 | Max movement per tick | Burns extra energy per round |
+| `perception` | 12–90 px | Vision range | Also burns extra energy per round |
+
+Reproduction is **sexual** — two parents blend all 8 genes at the midpoint, then
+mutate by ±mutation. Children spawn with low energy near their parents.
+
+### Relationship memory
+
+Each agent holds a `{uid → {score, count, gene_snapshot}}` dictionary.
+
+- **score** runs −1 to +1 and decays 2% per round toward zero (batch-applied every 10 ticks)
+- **count** tracks total interactions with that agent (used for reproduction gating)
+- **gene_snapshot** is the last observed gene vector of the other agent — enables kin recognition
+
+### Consent gate
+
+Before any interaction, both agents independently evaluate their attitude toward
+the other. If either attitude falls below their personal selectivity threshold, the
+interaction is silently skipped.
+
+```
+threshold = selectivity × 0.5 − 0.3
+```
+
+At selectivity = 0: threshold = −0.3 (accepts almost anyone).
+At selectivity = 1: threshold = +0.2 (requires a genuinely positive history).
+
+### Attitude calculation
+
+```
+attitude_i_toward_j =
+  if j is known in memory:    memory_score[j]
+  else:                        openness[i]   ...blended with kin signal below
+```
+
+**Kin recognition** (when j is a stranger): agent i scans a sample of its
+memory for agents whose gene vector is similar to j's, weighted by `kinBias`.
+This means prior experience with one agent shapes attitude toward their genetic
+relatives, even before any direct interaction.
+
+### Tick sequence
+
+1. **Spawn food**
+2. **Move** (same vectorised steering as v1)
+3. **Eat food** (cKDTree nearest-pellet query)
+4. **Energy decay** (same formula as v1)
+5. **Interact + reproduce** — for each pair within perception range:
+   - Evaluate consent (both agents must pass threshold)
+   - Play interaction game (same payoff table as v1)
+   - Update both agents' memory scores
+   - Check reproduction eligibility
+
+### Reproduction trigger (sexual)
+
+A pair reproduces when **all** of the following hold:
+
+| Condition | Value |
+|---|---|
+| Mutual memory score | ≥ 0.65 |
+| Interaction count (each direction) | ≥ 5 separate rounds |
+| Energy of both parents | ≥ 60 |
+| Cooldown since last reproduction (this pair) | ≥ 80 rounds |
+
+Cost: 20 energy from each parent. The child receives blended genes ± mutation noise.
+
+### Visual language
+
+| Visual element | Meaning |
+|---|---|
+| Orange-red agent | Low cooperativeness (defector) |
+| Cyan-blue agent | High cooperativeness (cooperator) |
+| Brightness | Energy level |
+| **Green line** | Active social bond (mutual memory score > 0.5, ≥ 5 interactions) |
+| **Gold expanding ring** | Birth event — a new agent just spawned |
+| Glow + trail | Bloom from the float32 canvas; trail persistence controlled by slider |
+
+### Chart (bottom of panel)
+
+| Line | Colour | What it shows |
 |---|---|---|
-| `cooperativeness` | 0 – 1 | Determines interaction outcome. The central evolving trait. |
-| `speed` | 0.4 – 3.5 | Max movement per tick. Faster agents find food sooner but burn more energy existing. |
-| `perception` | 12 – 90 px | How far the agent can see food and neighbours. Wide perception also costs energy. |
+| `coop` | Blue | Average cooperativeness |
+| `open` | Green | Average openness — watch this drift to diagnose social pressure |
+| `sel` | Orange | Average selectivity |
+| `pop` | Grey | Population (normalised) |
 
-The metabolic tension is intentional: every advantage has a cost. A fast, wide-seeing agent will starve in a food desert even if it never loses a fight.
+**Watch the openness line.** If it drifts upward, the population is selecting for
+sociability. If it collapses toward 0, isolated or highly selective phenotypes have
+won — usually a sign that defectors are present and trust has been broken at scale.
 
----
+### Scenarios to try
 
-## What happens each tick
+**Trust collapse under food scarcity**
+Drop food rate to 2–3. Agents must rely on mutualism bonds for energy income.
+Agents with no bonds starve. Social density should drop sharply then recover as
+only the well-connected survive.
 
-Four steps occur in sequence for every agent:
+**Kin network formation**
+Set kinBias high in the initial population (it is random, so just watch). Agents
+that have high kinBias and positive memory will extend trust to genetic relatives
+before ever meeting them directly, seeding clusters that look like families.
 
-### 1. Move
+**Mutation breaks kin recognition**
+Crank mutation to 0.7+. Gene vectors in memory no longer match offspring reliably.
+Kin recognition misfires constantly. Social structure becomes incoherent — watch
+the openness and selectivity lines destabilise.
 
-Each agent steers toward the nearest food pellet within **3× its perception radius**. If no food is visible, it wanders randomly. Velocity is capped at the `speed` gene value. Agents bounce off the world boundary.
-
-### 2. Eat
-
-If an agent is within **10 px** of a food pellet, it absorbs it:
-
-```
-energy += 22  (capped at 100)
-```
-
-The pellet is consumed and removed. One pellet can only be eaten by one agent per tick.
-
-### 3. Interact
-
-With every neighbour inside its perception radius, the agent plays a one-shot game determined by both agents' cooperativeness scores:
-
-| Combined coop score | Outcome |
-|---|---|
-| Both high (`sum > 1.3`) | **Mutualism** — both gain +2.5 energy |
-| Both low (`sum < 0.7`) | **Fighting** — both lose −3.5 energy |
-| Mixed | **Exploitation** — the more selfish one gains +3.0; the cooperative one loses −4.5 |
-
-All pair interactions for a tick are resolved simultaneously (vectorised via `np.add.at`), so no agent has an ordering advantage.
-
-### 4. Decay
-
-Every agent loses a baseline amount of energy per tick, plus extra for their genes:
-
-```
-energy -= 0.13 + (speed × 0.025) + (perception × 0.001)
-```
-
-No agent gets a free lunch just by existing.
+**Observe the bond network**
+Use speed = 1 (slow) and watch green bond lines accumulate and dissolve in real time.
+Stable cooperator clusters should show dense green webs. Defector patches will be
+sparse — they interact but never form bonds.
 
 ---
 
-## Reproduction and death
-
-- **Reproduce** when energy ≥ 80. The parent pays 33 energy; a child spawns within 12 px with genes copied from the parent plus random mutations.
-- **Die** when energy ≤ 0. The slot is recycled for future offspring.
-- **Population cap**: 1400 agents maximum. Reproduction is blocked above this limit.
-
-### Mutation
-
-Each child gene is nudged by:
-
-```
-new_gene = clamp(parent_gene + uniform(-range, range) × mutation × 2, lo, hi)
-```
-
-Where `mutation` is the slider value (0 – 1). High mutation → rapid genetic drift, unstable lineages. Low mutation → slow change, strong inheritance.
-
----
-
-## The core dynamic
-
-This is a **spatial prisoner's dilemma**. In a well-mixed population, defectors (low coop) always win — they exploit cooperators and pay no cost when fighting each other if cooperators are abundant. Classical game theory predicts cooperation collapses.
-
-**Space changes everything.** Because agents move locally and interact with neighbours, cooperators naturally cluster. A patch of high-coop agents (shown in blue/cyan) thrives through constant mutualism bonuses. A defector (red/orange) that enters the cluster initially profits from exploitation, but as it depletes cooperative neighbours it eventually fights other defectors and dies. This is why the simulation typically stabilises at a mixed equilibrium — spatial structure protects cooperator clusters long enough to persist.
-
----
-
-## Controls
-
-### Sliders (drag in the right panel)
+## Controls (both versions)
 
 | Slider | Range | Default | Effect |
 |---|---|---|---|
-| **speed** | 1 – 30 ticks/frame | 5 | How fast simulation time passes. No effect on dynamics, only on how quickly you see them. |
-| **food rate** | 0 – 30 pellets/tick | 8 | **Most powerful lever.** High food → weak selection on cooperativeness, large mixed population. Low food → every interaction is life or death; cooperators in defector-heavy patches are wiped out, but cooperator clusters thrive. The interesting dynamics live at 4 – 12. |
-| **mutation** | 0.00 – 1.00 | 0.15 | Genetic drift magnitude. 0 = locked lineages; 0.5+ = genes drift randomly, strategies don't stabilise. Sweet spot: 0.10 – 0.25. |
-| **trail decay** | 0.50 – 0.99 | 0.78 | How fast motion trails fade per frame. 0.50 = trails vanish almost immediately (sharp). 0.99 = long luminous comet tails showing recent paths. |
+| **speed** | 1–20 (v2) / 1–30 (v1) ticks/frame | 3–5 | Simulation clock rate. No effect on dynamics. |
+| **food rate** | 0–30 pellets/tick | 8 | Dominant lever. Low food → strong selection on social traits. |
+| **mutation** | 0.00–1.00 | 0.15 | Gene drift per reproduction. 0 = locked lineages; 0.6+ = chaos. |
+| **trail decay** | 0.50–0.99 | 0.78 | How fast motion trails fade. 0.99 = long comet tails. |
 
-### Buttons
-
-| Button / Key | Action |
+| Key / Button | Action |
 |---|---|
 | **PLAY / PAUSE** or `Space` | Toggle simulation |
 | **RESET** or `R` | Fresh random population |
-| **trails ON/OFF** or `T` | Toggle trail persistence entirely |
+| **trails ON/OFF** or `T` | Toggle trail persistence |
 
 ---
 
-## Visual language
-
-| Colour | Meaning |
-|---|---|
-| Orange-red | Low cooperativeness (defector) |
-| Violet | Mid cooperativeness |
-| Cyan-blue | High cooperativeness (cooperator) |
-| Brightness | Energy level — full brightness = high energy, near-black = almost dead |
-| Lime green dots | Food pellets |
-| Glow halo | Bloom effect proportional to the trail canvas intensity at that position |
-
----
-
-## Live stats (right panel)
-
-| Stat | Description |
-|---|---|
-| population | Number of living agents |
-| round | Simulation ticks elapsed |
-| food | Current food pellets on the field |
-| avg energy | Mean energy across all agents |
-| avg coop | Mean cooperativeness — watch this drift toward 0 (defectors win) or hold above 0.5 (cooperators persist) |
-| avg speed | Mean speed gene |
-| avg percep | Mean perception radius |
-
-The mini graph at the bottom of the panel shows **avg coop** (blue) and **population** (grey) over the last 300 recorded frames.
-
----
-
-## Scenarios to try
-
-**Cooperators collapse**
-Set food rate to 2. Watch avg coop drop as every interaction becomes critical and defectors outcompete. Often the population crashes and recovers with a different genetic balance.
-
-**Stable cooperator clusters**
-Set food rate to 8 – 12, mutation to 0.12. Blue patches form, hold their ground, and visibly resist orange invasion along their edges.
-
-**Genetic drift**
-Set mutation to 0.60. Genes randomise every few generations; no stable strategy emerges and cooperativeness oscillates wildly.
-
-**Fast-forward to equilibrium**
-Set speed to 20, watch for 1000+ rounds, then slow back to 5 to study the resulting population in detail.
-
-**Comet trails**
-Set trail decay to 0.97 and watch the luminous paths agents carve through the world, revealing flow patterns and congregation zones.
-
----
-
-## Project structure
+## Architecture
 
 ```
 DynamicAgents/
-  config.py       ← all constants and window dimensions
-  simulation.py   ← agent state, tick logic, cKDTree interactions
-  main.py         ← pygame game loop, rendering, slider UI
+  v1/
+    config.py       ← all constants
+    simulation.py   ← 3-gene agent, cKDTree interactions, vectorised NumPy
+    main.py         ← pygame loop, surfarray rendering, glow, sliders
+  v2/
+    config.py       ← all constants (extended for memory/trust params)
+    simulation.py   ← 8-gene agent, memory, consent, sexual reproduction
+    main.py         ← adds bond lines, birth rings, 4-line chart
   README.md
 ```
 
-### Key implementation notes
+### Rendering pipeline (both versions)
 
-- **Vectorised movement**: the food-steering and speed-clamping are fully NumPy — no per-agent Python loops.
-- **cKDTree interactions**: `scipy.spatial.cKDTree.query_pairs` finds all neighbour pairs in O(n log n). Energy deltas are accumulated with `np.add.at` and applied in one pass.
-- **Surfarray rendering**: agents are painted into a float32 NumPy canvas with `np.maximum.at`, then a Gaussian bloom is composited on top before blitting via `pygame.surfarray.make_surface`. This avoids per-agent `draw.circle` calls entirely.
-- **Food eating**: `cKDTree.query` finds the nearest pellet per agent in O(n log m); conflict resolution (one pellet per agent, one agent per pellet) runs in a short Python loop over the small result set.
+1. Decay the persistent float32 canvas by `trail_decay` each frame
+2. Paint agent positions with `np.maximum.at` (vectorised, no per-agent loop)
+3. Half-resolution Gaussian blur of the canvas → bloom layer
+4. Composite `canvas + bloom × GLOW_BOOST` → uint8 → `pygame.surfarray.make_surface`
+5. Blit alpha-channel overlays on top: bond lines (v2), birth rings (v2), food dots
+
+### Simulation performance
+
+- **Movement**: fully NumPy-vectorised (no Python loop over agents)
+- **Neighbour search**: `scipy.spatial.cKDTree.query_pairs` → O(n log n)
+- **Interaction loop**: Python loop over pairs, capped at 2500/tick in v2
+- **Memory operations**: O(1) dict lookups per pair; batch-decayed every 10 ticks
+- **Bond cache**: rebuilt every 8 ticks, not every frame
 
 ---
 
 ## Dependencies
 
-| Package | Purpose |
-|---|---|
-| `pygame` | Window, event loop, surfarray blit |
-| `numpy` | Vectorised agent state arrays |
-| `scipy` | cKDTree for O(n log n) neighbour search |
-| `matplotlib` | LinearSegmentedColormap for agent colouring |
+```bash
+pip install pygame numpy scipy matplotlib
+```

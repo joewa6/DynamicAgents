@@ -1,0 +1,25 @@
+W, H        = 900, 500
+PANEL_W     = 220
+SCREEN_W    = W + PANEL_W
+
+MAX_ENERGY       = 100.0
+FOOD_ENERGY      = 22.0
+ENERGY_DECAY     = 0.11
+REPRO_THRESHOLD  = 60.0    # energy each parent needs
+REPRO_COST       = 20.0    # energy cost per parent
+REPRO_SCORE_MIN  = 0.65    # mutual memory score required
+REPRO_COUNT_MIN  = 5       # minimum mutual interactions required
+REPRO_COOLDOWN   = 80      # rounds before same pair can reproduce again
+MAX_POP          = 1200
+MAX_FOOD         = 150
+FOOD_EAT_RADIUS  = 10.0
+INIT_AGENTS      = 180
+INIT_FOOD        = 80
+FPS              = 60
+MEMORY_DECAY     = 0.98    # per-round score decay (applied in batch every 10 ticks)
+MAX_MEMORY       = 80      # max memory entries per agent
+MAX_PAIRS_TICK   = 2500    # cap on pair interactions evaluated per tick
+BOND_MIN_SCORE   = 0.50    # memory score threshold to draw a bond line
+BOND_MIN_COUNT   = 5       # minimum interaction count to draw a bond line
+BOND_CACHE_FREQ  = 8       # ticks between bond-list rebuilds
+GC_FREQ          = 50      # ticks between memory garbage-collection passes
