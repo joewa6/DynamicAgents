@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: dynamic-agents-v3
+    runtime: docker
+    plan: free
+    dockerfilePath: ./v3/Dockerfile
+    dockerContext: ./v3
+    envVars:
+      - key: JULIA_NUM_THREADS
+        value: auto

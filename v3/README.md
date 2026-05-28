@@ -30,3 +30,18 @@ slow modes such as one simulation tick every 10, 100, or 1000 rendered frames.
 The previous rapid loop, before the slow-motion speed control was added, should
 be treated as the seed for V4: a faster performance/search-oriented version for
 headless runs, parameter sweeps, and scoring candidate regimes.
+
+## Render Deploy
+
+V3 is deployable as a Render web service.
+
+Use the repository blueprint in the root `render.yaml`, or create a Render web
+service manually with:
+
+- runtime: Docker
+- Dockerfile path: `v3/Dockerfile`
+- Docker context: `v3`
+
+Render provides the `PORT` environment variable. The V3 server serves both the
+static app and WebSocket stream from that single port. The WebSocket endpoint is
+`/ws`.

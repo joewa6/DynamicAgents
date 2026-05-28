@@ -857,7 +857,8 @@ setupPhaseSelectors();
 let ws = null, running = false, latestFrame = null, pendingStart = false;
 
 function connect() {
-  ws = new WebSocket('ws://localhost:8001');
+  const wsScheme = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsScheme}//${location.host}/ws`);
   ws.onopen = () => {
     document.getElementById('status').textContent = 'connected';
     document.getElementById('status').style.color = '#55aa55';

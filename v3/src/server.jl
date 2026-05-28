@@ -133,9 +133,16 @@ function http_handler(req::HTTP.Request)
     return HTTP.Response(200, ["Content-Type" => ctype], read(fpath))
 end
 
-function serve(host="0.0.0.0"; http_port=8000, ws_port=8001)
-    @async HTTP.serve(http_handler, host, http_port)
-    @async HTTP.WebSockets.listen(ws_handler, host, ws_port)
-    @info "Open http://localhost:$http_port - WebSocket on $ws_port"
-    run_sim_loop()
+function stream_handler(http)
+    if HTTP.WebSockets.isupgrade(http.message)
+        HTTP.WebSockets.upgrade(ws_handler, http)
+    else
+        HTTP.Handlers.streamhandler(http_handler)(http)
+    end
+end
+
+function serve(host="0.0.0.0"; port=parse(Int, get(ENV, "PORT", "8000")))
+    @async run_sim_loop()
+    @info "Open http://localhost:$port - WebSocket on /ws"
+    HTTP.listen(stream_handler, host, port)
 end
